@@ -349,6 +349,10 @@
       transition: background var(--ease), box-shadow var(--ease);
     }
 
+    .tab-button .tab-name {
+      padding-right: 0.65rem;
+    }
+
     .tab-button:hover,
     .tab-button:focus-visible {
       color: var(--text-primary);
@@ -378,8 +382,30 @@
     }
 
     .tab-mark {
+      flex: 0 0 5.8rem;
+      min-height: 2rem;
+      padding: 0.16rem 0.18rem;
       color: rgba(201, 168, 76, 0.65);
+      font-family: var(--font-body);
       font-size: 0.84rem;
+      font-style: normal;
+      line-height: 1.1;
+      text-align: right;
+      background: transparent;
+      border: 0;
+      border-bottom: 1px solid rgba(192, 57, 43, 0.25);
+      box-shadow: none;
+    }
+
+    .tab-mark::placeholder {
+      color: rgba(201, 168, 76, 0.36);
+    }
+
+    .tab-mark:focus {
+      color: var(--gold);
+      background: rgba(0, 0, 0, 0.22);
+      border-color: rgba(255, 68, 68, 0.7);
+      box-shadow: 0 7px 16px rgba(192, 57, 43, 0.08);
     }
 
     .action-stack {
@@ -1703,7 +1729,14 @@
   <script>
     const STORAGE_KEY = "sinaisDoFim.characters.v1";
     const ACTIVE_KEY = "sinaisDoFim.activeCharacter.v1";
-    const SAVE_DELAY = 300;
+    const CHANNEL_KEY = "sinaisDoFim.realtime.v1";
+    const SUPABASE_URL = "https://nfhexjnqaypropgukzij.supabase.co";
+    const SUPABASE_KEY = "sb_publishable_3JND7D2dPk5VvK6VC2XX2A_aUAecooQ";
+    const SUPABASE_TABLE = "character_sheets";
+    const SUPABASE_REST_URL = `${SUPABASE_URL}/rest/v1/${SUPABASE_TABLE}`;
+    const SUPABASE_REALTIME_URL = `${SUPABASE_URL.replace("https://", "wss://")}/realtime/v1/websocket?apikey=${encodeURIComponent(SUPABASE_KEY)}&vsn=1.0.0`;
+    const SAVE_DELAY = 120;
+    const CLOUD_SAVE_DELAY = 260;
 
     const ATTRIBUTES = [
       { key: "FOR", name: "Força", color: "#8B4513" },
@@ -1734,6 +1767,16 @@
       characters: [],
       activeId: null,
       saveTimer: null,
+      cloudSaveTimer: null,
+      cloudRefreshTimer: null,
+      realtimeSocket: null,
+      realtimeHeartbeat: null,
+      realtimeRef: 1,
+      cloudReady: false,
+      lastCloudWriteAt: 0,
+      instanceId: makeId("session"),
+      syncChannel: null,
+      applyingRemoteUpdate: false,
       quoteIndex: 0
     };
 
@@ -1771,6 +1814,7 @@
         updatedAt: Date.now(),
         identity: {
           nome: "",
+          elemento: "Elemento",
           origem: "",
           medo: "",
           classe: "",
@@ -1834,27 +1878,278 @@
         : state.characters[0]?.id || null;
     }
 
-    function persistNow() {
-      const active = getActiveCharacter();
+    function supabaseHeaders(extra = {}) {
+      return {
+        apikey: SUPABASE_KEY,
+        Authorization: `Bearer ${SUPABASE_KEY}`,
+        "Content-Type": "application/json",
+        ...extra
+      };
+    }
 
-      if (active) {
-        active.updatedAt = Date.now();
+    function serializeCharacter(character) {
+      return JSON.parse(JSON.stringify(character));
+    }
+
+    async function fetchCloudCharacters() {
+      const response = await fetch(`${SUPABASE_REST_URL}?select=id,data,updated_at&order=updated_at.desc`, {
+        headers: supabaseHeaders()
+      });
+
+      if (!response.ok) {
+        throw new Error(`Supabase GET ${response.status}`);
       }
 
+      const rows = await response.json();
+      return rows
+        .map((row) => row.data)
+        .filter(Boolean)
+        .map(normalizeCharacter);
+    }
+
+    async function upsertCloudCharacters(characters) {
+      if (!characters.length) {
+        return;
+      }
+
+      const rows = characters.map((character) => ({
+        id: character.id,
+        data: serializeCharacter(character)
+      }));
+
+      const response = await fetch(`${SUPABASE_REST_URL}?on_conflict=id`, {
+        method: "POST",
+        headers: supabaseHeaders({
+          Prefer: "resolution=merge-duplicates,return=minimal"
+        }),
+        body: JSON.stringify(rows)
+      });
+
+      if (!response.ok) {
+        throw new Error(`Supabase UPSERT ${response.status}`);
+      }
+    }
+
+    async function deleteCloudCharacter(characterId) {
+      if (!characterId) {
+        return;
+      }
+
+      const response = await fetch(`${SUPABASE_REST_URL}?id=eq.${encodeURIComponent(characterId)}`, {
+        method: "DELETE",
+        headers: supabaseHeaders({ Prefer: "return=minimal" })
+      });
+
+      if (!response.ok) {
+        throw new Error(`Supabase DELETE ${response.status}`);
+      }
+    }
+
+    function syncLocalStorage() {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state.characters));
       if (state.activeId) {
         localStorage.setItem(ACTIVE_KEY, state.activeId);
       } else {
         localStorage.removeItem(ACTIVE_KEY);
       }
+    }
+
+    async function refreshFromCloud(options = {}) {
+      if (state.applyingRemoteUpdate) {
+        return;
+      }
+
+      try {
+        const remoteCharacters = await fetchCloudCharacters();
+        state.cloudReady = true;
+
+        if (remoteCharacters.length > 0 || options.forceEmpty) {
+          state.applyingRemoteUpdate = true;
+          state.characters = remoteCharacters;
+          state.activeId = state.characters.some((character) => character.id === state.activeId)
+            ? state.activeId
+            : state.characters[0]?.id || null;
+          syncLocalStorage();
+          setSaveStatus("Nuvem", false);
+          render();
+          broadcastState();
+          state.applyingRemoteUpdate = false;
+        } else if (state.characters.length > 0) {
+          await upsertCloudCharacters(state.characters);
+          setSaveStatus("Nuvem", false);
+        } else {
+          setSaveStatus("Nuvem", false);
+        }
+      } catch (error) {
+        state.cloudReady = false;
+        setSaveStatus("Local", false);
+      } finally {
+        state.applyingRemoteUpdate = false;
+      }
+    }
+
+    function scheduleCloudSave(characters = state.characters) {
+      if (state.applyingRemoteUpdate) {
+        return;
+      }
+
+      clearTimeout(state.cloudSaveTimer);
+      const snapshot = characters.map(serializeCharacter);
+      state.cloudSaveTimer = setTimeout(async () => {
+        try {
+          state.lastCloudWriteAt = Date.now();
+          await upsertCloudCharacters(snapshot);
+          state.cloudReady = true;
+          setSaveStatus("Nuvem", false);
+        } catch (error) {
+          state.cloudReady = false;
+          setSaveStatus("Local", false);
+        }
+      }, CLOUD_SAVE_DELAY);
+    }
+
+    function queueCloudRefresh() {
+      clearTimeout(state.cloudRefreshTimer);
+      state.cloudRefreshTimer = setTimeout(() => refreshFromCloud({ forceEmpty: true }), 180);
+    }
+
+    function sendRealtime(event, topic, payload = {}) {
+      if (!state.realtimeSocket || state.realtimeSocket.readyState !== WebSocket.OPEN) {
+        return;
+      }
+
+      const ref = String(state.realtimeRef += 1);
+      state.realtimeSocket.send(JSON.stringify({
+        topic,
+        event,
+        payload,
+        ref,
+        join_ref: "1"
+      }));
+    }
+
+    function setupSupabaseRealtime() {
+      try {
+        state.realtimeSocket = new WebSocket(SUPABASE_REALTIME_URL);
+      } catch (error) {
+        return;
+      }
+
+      state.realtimeSocket.addEventListener("open", () => {
+        const topic = `realtime:public:${SUPABASE_TABLE}`;
+        sendRealtime("phx_join", topic, {
+          config: {
+            broadcast: { ack: false, self: false },
+            presence: { enabled: false },
+            postgres_changes: [
+              { event: "*", schema: "public", table: SUPABASE_TABLE }
+            ],
+            private: false
+          },
+          access_token: SUPABASE_KEY
+        });
+
+        clearInterval(state.realtimeHeartbeat);
+        state.realtimeHeartbeat = setInterval(() => {
+          sendRealtime("heartbeat", "phoenix", {});
+        }, 25000);
+      });
+
+      state.realtimeSocket.addEventListener("message", (event) => {
+        try {
+          const message = JSON.parse(event.data);
+          if (message.event === "postgres_changes") {
+            if (Date.now() - state.lastCloudWriteAt < 1500) {
+              return;
+            }
+            queueCloudRefresh();
+          }
+        } catch (error) {
+          // Ignore malformed realtime packets.
+        }
+      });
+
+      state.realtimeSocket.addEventListener("close", () => {
+        clearInterval(state.realtimeHeartbeat);
+        state.realtimeHeartbeat = null;
+        setTimeout(setupSupabaseRealtime, 2200);
+      });
+    }
+
+    function persistNow(options = {}) {
+      const shouldBroadcast = options.broadcast !== false;
+      const active = getActiveCharacter();
+
+      if (active) {
+        active.updatedAt = Date.now();
+      }
+
+      syncLocalStorage();
       setSaveStatus("Salvo", false);
-      renderCharacterTabs();
+
+      if (shouldBroadcast) {
+        broadcastState();
+      }
+
+      scheduleCloudSave();
     }
 
     function scheduleSave() {
+      if (state.applyingRemoteUpdate) {
+        return;
+      }
+
       setSaveStatus("...", true);
       clearTimeout(state.saveTimer);
       state.saveTimer = setTimeout(persistNow, SAVE_DELAY);
+    }
+
+    function broadcastState() {
+      const payload = {
+        source: state.instanceId,
+        characters: state.characters,
+        activeId: state.activeId,
+        sentAt: Date.now()
+      };
+
+      if (state.syncChannel) {
+        state.syncChannel.postMessage(payload);
+      }
+
+      localStorage.setItem(CHANNEL_KEY, JSON.stringify(payload));
+    }
+
+    function applyRemoteState(payload) {
+      if (!payload || payload.source === state.instanceId || !Array.isArray(payload.characters)) {
+        return;
+      }
+
+      state.applyingRemoteUpdate = true;
+      clearTimeout(state.saveTimer);
+      state.characters = payload.characters.map(normalizeCharacter);
+      state.activeId = state.characters.some((character) => character.id === payload.activeId)
+        ? payload.activeId
+        : state.characters[0]?.id || null;
+      setSaveStatus("Salvo", false);
+      render();
+      state.applyingRemoteUpdate = false;
+    }
+
+    function setupRealtimeSync() {
+      if ("BroadcastChannel" in window) {
+        state.syncChannel = new BroadcastChannel(CHANNEL_KEY);
+        state.syncChannel.addEventListener("message", (event) => applyRemoteState(event.data));
+      }
+
+      window.addEventListener("storage", (event) => {
+        if (event.key === CHANNEL_KEY && event.newValue) {
+          try {
+            applyRemoteState(JSON.parse(event.newValue));
+          } catch (error) {
+            // Ignore malformed sync packets from older sessions.
+          }
+        }
+      });
     }
 
     function setSaveStatus(text, saving) {
@@ -1912,11 +2207,23 @@
         return;
       }
 
+      const deletedId = state.activeId;
       state.characters = state.characters.filter((character) => character.id !== state.activeId);
       state.activeId = state.characters[0]?.id || null;
       closeDeleteModal();
       persistNow();
       render();
+
+      state.lastCloudWriteAt = Date.now();
+      deleteCloudCharacter(deletedId)
+        .then(() => {
+          state.cloudReady = true;
+          setSaveStatus("Nuvem", false);
+        })
+        .catch(() => {
+          state.cloudReady = false;
+          setSaveStatus("Local", false);
+        });
     }
 
     function renderCharacterTabs() {
@@ -1926,7 +2233,7 @@
         const item = document.createElement("li");
         const button = document.createElement("button");
         const name = document.createElement("span");
-        const mark = document.createElement("span");
+        const mark = document.createElement("input");
 
         button.type = "button";
         button.className = "tab-button";
@@ -1938,7 +2245,11 @@
         name.textContent = displayName(character);
 
         mark.className = "tab-mark";
-        mark.textContent = character.id === state.activeId ? "sangue" : "página";
+        mark.type = "text";
+        mark.value = character.identity.elemento || "";
+        mark.placeholder = "Elemento";
+        mark.dataset.characterElement = character.id;
+        mark.setAttribute("aria-label", `Elemento de ${displayName(character)}`);
 
         button.append(name, mark);
         item.append(button);
@@ -2010,6 +2321,7 @@
         const segments = document.createElement("div");
 
         card.className = "status-card";
+        card.dataset.statusCard = status.key;
         if (status.kind === "corruption") {
           card.classList.add("special-status", "corruption-card");
         }
@@ -2052,6 +2364,7 @@
         for (let index = 0; index < status.segments; index += 1) {
           const segment = document.createElement("span");
           segment.className = "segment";
+          segment.dataset.segment = String(index);
           if (index < filledSegments) {
             segment.classList.add("filled");
           }
@@ -2066,6 +2379,7 @@
         if (status.kind !== "bar") {
           const meter = document.createElement("div");
           meter.className = "sigil-meter";
+          meter.dataset.statusMeter = status.key;
           meter.style.setProperty("--pct", percent);
           meter.dataset.symbol = status.kind === "corruption" ? "⟲" : "✦";
           meter.setAttribute("aria-hidden", "true");
@@ -2200,7 +2514,64 @@
       setPathValue(active, input.dataset.field, input.value);
       scheduleSave();
       if (input.dataset.field === "identity.nome") {
-        renderCharacterTabs();
+        updateTabName(active);
+      }
+    }
+
+    function updateTabName(character) {
+      const button = elements.characterList.querySelector(`[data-character-id="${character.id}"]`);
+      const name = button?.querySelector(".tab-name");
+
+      if (name) {
+        name.textContent = displayName(character);
+      }
+
+      const elementInput = button?.querySelector("[data-character-element]");
+      if (elementInput) {
+        elementInput.setAttribute("aria-label", `Elemento de ${displayName(character)}`);
+      }
+    }
+
+    function paintStatusCard(statusKey) {
+      const active = getActiveCharacter();
+      const status = STATUSES.find((item) => item.key === statusKey);
+      const data = active?.status[statusKey];
+
+      if (!active || !status || !data) {
+        return;
+      }
+
+      const card = elements.statusList.querySelector(`[data-status-card="${statusKey}"]`);
+      if (!card) {
+        return;
+      }
+
+      const current = clampNumber(data.current, 0, Math.max(1, data.max));
+      const max = Math.max(1, clampNumber(data.max, 1, 999));
+      const filledSegments = Math.round((current / max) * status.segments);
+      const percent = Math.round((current / max) * 100);
+      const currentInput = card.querySelector(`[data-status-part="current"]`);
+      const maxInput = card.querySelector(`[data-status-part="max"]`);
+
+      if (currentInput && document.activeElement !== currentInput) {
+        currentInput.value = current;
+      }
+
+      if (maxInput && document.activeElement !== maxInput) {
+        maxInput.value = max;
+      }
+
+      if (currentInput) {
+        currentInput.max = String(max);
+      }
+
+      card.querySelectorAll(".segment").forEach((segment, index) => {
+        segment.classList.toggle("filled", index < filledSegments);
+      });
+
+      const meter = card.querySelector(`[data-status-meter="${statusKey}"]`);
+      if (meter) {
+        meter.style.setProperty("--pct", percent);
       }
     }
 
@@ -2234,7 +2605,7 @@
       }
 
       scheduleSave();
-      renderStatuses(active);
+      paintStatusCard(key);
     }
 
     function updateSkill(input) {
@@ -2327,6 +2698,10 @@
       });
 
       elements.characterList.addEventListener("click", (event) => {
+        if (event.target.closest("[data-character-element]")) {
+          return;
+        }
+
         const button = event.target.closest("[data-character-id]");
         if (!button) {
           return;
@@ -2335,6 +2710,27 @@
         state.activeId = button.dataset.characterId;
         persistNow();
         render();
+      });
+
+      elements.characterList.addEventListener("input", (event) => {
+        const input = event.target.closest("[data-character-element]");
+        if (!input) {
+          return;
+        }
+
+        const character = state.characters.find((item) => item.id === input.dataset.characterElement);
+        if (!character) {
+          return;
+        }
+
+        character.identity.elemento = input.value;
+        scheduleSave();
+      });
+
+      elements.characterList.addEventListener("keydown", (event) => {
+        if (event.target.closest("[data-character-element]")) {
+          event.stopPropagation();
+        }
       });
 
       elements.sheetForm.addEventListener("input", (event) => {
@@ -2385,8 +2781,11 @@
     }
 
     loadState();
+    setupRealtimeSync();
+    setupSupabaseRealtime();
     setupEvents();
     render();
+    refreshFromCloud();
     startQuoteCycle();
   </script>
 </body>
