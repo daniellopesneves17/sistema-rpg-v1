@@ -1008,6 +1008,134 @@
       border-top-color: rgba(201, 168, 76, 0.22);
     }
 
+    .inventory-section {
+      grid-column: 1 / -1;
+      background:
+        linear-gradient(120deg, rgba(42, 110, 110, 0.055), transparent 28%),
+        linear-gradient(180deg, rgba(201, 168, 76, 0.028), transparent 45%),
+        rgba(17, 17, 21, 0.9);
+      border-top-color: rgba(42, 110, 110, 0.32);
+    }
+
+    .inventory-section::before {
+      background: linear-gradient(90deg, transparent, rgba(42, 110, 110, 0.46), rgba(201, 168, 76, 0.22), transparent);
+    }
+
+    .inventory-toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      align-items: end;
+      justify-content: space-between;
+      margin-bottom: 0.9rem;
+    }
+
+    .inventory-size-field {
+      display: grid;
+      gap: 0.24rem;
+      width: min(100%, 14rem);
+    }
+
+    .inventory-size-field label,
+    .inventory-total {
+      color: var(--text-secondary);
+      font-family: var(--font-title);
+      font-size: 0.72rem;
+      letter-spacing: 0.13em;
+      text-transform: uppercase;
+    }
+
+    .inventory-size-field input {
+      min-height: 44px;
+      padding: 0.36rem 0.55rem;
+      color: var(--teal);
+      font-family: var(--font-number);
+      font-size: 1.55rem;
+      text-align: center;
+      border: 1px solid rgba(42, 110, 110, 0.35);
+      background:
+        linear-gradient(180deg, rgba(42, 110, 110, 0.12), rgba(0, 0, 0, 0.18)),
+        rgba(6, 8, 9, 0.68);
+    }
+
+    .inventory-total {
+      display: inline-flex;
+      align-items: center;
+      min-height: 44px;
+      padding: 0.45rem 0.75rem;
+      color: var(--gold);
+      background: rgba(0, 0, 0, 0.22);
+      border: 1px solid rgba(201, 168, 76, 0.22);
+    }
+
+    .inventory-list {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 0.55rem;
+    }
+
+    .inventory-row {
+      display: grid;
+      grid-template-columns: minmax(2.8rem, 0.16fr) minmax(8rem, 1fr) minmax(5rem, 0.25fr);
+      gap: 0.55rem;
+      align-items: end;
+      min-height: 4.9rem;
+      padding: 0.62rem;
+      background:
+        linear-gradient(90deg, rgba(42, 110, 110, 0.07), transparent 55%),
+        rgba(8, 8, 10, 0.5);
+      border: 1px solid rgba(42, 37, 32, 0.82);
+      transition: border-color var(--ease), box-shadow var(--ease), background var(--ease);
+    }
+
+    .inventory-row:hover,
+    .inventory-row:focus-within {
+      border-color: rgba(42, 110, 110, 0.42);
+      background:
+        linear-gradient(90deg, rgba(42, 110, 110, 0.105), transparent 56%),
+        rgba(10, 10, 12, 0.66);
+      box-shadow: 0 0 18px rgba(42, 110, 110, 0.08);
+    }
+
+    .inventory-slot {
+      display: grid;
+      place-items: center;
+      min-height: 44px;
+      color: rgba(201, 168, 76, 0.76);
+      font-family: var(--font-number);
+      font-size: 1.35rem;
+      background: rgba(0, 0, 0, 0.24);
+      border: 1px solid rgba(201, 168, 76, 0.22);
+    }
+
+    .inventory-cell {
+      display: grid;
+      gap: 0.24rem;
+      min-width: 0;
+    }
+
+    .inventory-cell label {
+      color: var(--text-secondary);
+      font-family: var(--font-title);
+      font-size: 0.68rem;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+
+    .inventory-cell input {
+      min-height: 44px;
+      padding: 0.45rem 0.42rem;
+    }
+
+    .inventory-bulk-input {
+      color: var(--gold);
+      font-family: var(--font-number);
+      font-size: 1.22rem;
+      text-align: center;
+      border: 1px solid rgba(201, 168, 76, 0.24);
+      background: rgba(0, 0, 0, 0.28);
+    }
+
     .skills-toolbar {
       display: flex;
       justify-content: flex-end;
@@ -1350,6 +1478,10 @@
         grid-template-columns: minmax(0, 1fr) 5.5rem 5.3rem 44px;
       }
 
+      .inventory-list {
+        grid-template-columns: 1fr;
+      }
+
       .skill-label {
         font-size: 0.66rem;
       }
@@ -1429,6 +1561,22 @@
       .skill-row {
         grid-template-columns: 1fr 44px;
         align-items: center;
+      }
+
+      .inventory-toolbar {
+        display: grid;
+      }
+
+      .inventory-size-field {
+        width: 100%;
+      }
+
+      .inventory-row {
+        grid-template-columns: 2.8rem minmax(0, 1fr);
+      }
+
+      .inventory-row .inventory-cell:last-child {
+        grid-column: 1 / -1;
       }
 
       .skill-cell {
@@ -1685,6 +1833,18 @@
             <button id="addSkillButton" class="rune-button" type="button">＋ Adicionar Perícia</button>
           </div>
         </section>
+
+        <section class="section inventory-section" aria-labelledby="inventoryTitle">
+          <h2 id="inventoryTitle" class="section-title"><span>Inventário</span></h2>
+          <div class="inventory-toolbar">
+            <label class="inventory-size-field" for="inventorySize">
+              <span>Tamanho do Inventário</span>
+              <input id="inventorySize" type="text" inputmode="numeric" min="1" max="99" aria-label="Tamanho do inventário">
+            </label>
+            <div id="inventoryTotal" class="inventory-total" aria-live="polite">Ocupação 0 / 10</div>
+          </div>
+          <div id="inventoryList" class="inventory-list" aria-label="Itens do inventário"></div>
+        </section>
       </form>
     </div>
 
@@ -1734,6 +1894,8 @@
       { key: "DES", name: "Destino", icon: "✦", color: "#c9a84c", max: 6, segments: 12, kind: "destiny" }
     ];
 
+    const DEFAULT_INVENTORY_SIZE = 10;
+
     const QUOTES = [
       "O fim não chega de repente. Ele sussurra primeiro.",
       "Cada marca em sua pele é um sinal que você ignorou.",
@@ -1772,6 +1934,9 @@
       statusList: document.querySelector("#statusList"),
       skillsList: document.querySelector("#skillsList"),
       addSkillButton: document.querySelector("#addSkillButton"),
+      inventorySize: document.querySelector("#inventorySize"),
+      inventoryTotal: document.querySelector("#inventoryTotal"),
+      inventoryList: document.querySelector("#inventoryList"),
       deleteModal: document.querySelector("#deleteModal"),
       cancelDeleteButton: document.querySelector("#cancelDeleteButton"),
       confirmDeleteButton: document.querySelector("#confirmDeleteButton"),
@@ -1811,8 +1976,22 @@
           };
           return acc;
         }, {}),
-        skills: []
+        skills: [],
+        inventorySize: DEFAULT_INVENTORY_SIZE,
+        inventory: Array.from({ length: DEFAULT_INVENTORY_SIZE }, () => ({ name: "", bulk: "" }))
       };
+    }
+
+    function normalizeInventory(items, size) {
+      const normalizedSize = clampNumber(size, 1, 99);
+
+      return Array.from({ length: normalizedSize }, (_, index) => {
+        const item = Array.isArray(items) ? items[index] || {} : {};
+        return {
+          name: item.name || "",
+          bulk: item.bulk ?? ""
+        };
+      });
     }
 
     function normalizeCharacter(character) {
@@ -1823,7 +2002,9 @@
         identity: { ...blank.identity, ...(character.identity || {}) },
         attributes: { ...blank.attributes, ...(character.attributes || {}) },
         status: { ...blank.status },
-        skills: Array.isArray(character.skills) ? character.skills : []
+        skills: Array.isArray(character.skills) ? character.skills : [],
+        inventorySize: clampNumber(character.inventorySize ?? DEFAULT_INVENTORY_SIZE, 1, 99),
+        inventory: Array.isArray(character.inventory) ? character.inventory : []
       };
 
       STATUSES.forEach((status) => {
@@ -1839,6 +2020,8 @@
         buff: skill.buff ?? "",
         attribute: ATTRIBUTES.some((attr) => attr.key === skill.attribute) ? skill.attribute : "FOR"
       }));
+
+      normalized.inventory = normalizeInventory(normalized.inventory, normalized.inventorySize);
 
       return normalized;
     }
@@ -2464,6 +2647,67 @@
       });
     }
 
+    function inventoryLoad(character) {
+      return character.inventory.reduce((total, item) => {
+        const value = Number.parseFloat(String(item.bulk).replace(",", "."));
+        return total + (Number.isFinite(value) ? value : 0);
+      }, 0);
+    }
+
+    function formatLoad(value) {
+      return Number.isInteger(value) ? String(value) : value.toFixed(1).replace(".", ",");
+    }
+
+    function renderInventory(character) {
+      character.inventorySize = clampNumber(character.inventorySize ?? DEFAULT_INVENTORY_SIZE, 1, 99);
+      character.inventory = normalizeInventory(character.inventory, character.inventorySize);
+
+      elements.inventorySize.value = character.inventorySize;
+      elements.inventoryTotal.textContent = `Ocupação ${formatLoad(inventoryLoad(character))} / ${character.inventorySize}`;
+      elements.inventoryList.innerHTML = "";
+
+      character.inventory.forEach((item, index) => {
+        const row = document.createElement("div");
+        const slot = document.createElement("div");
+        const itemCell = document.createElement("label");
+        const bulkCell = document.createElement("label");
+        const itemLabel = document.createElement("span");
+        const bulkLabel = document.createElement("span");
+        const itemInput = document.createElement("input");
+        const bulkInput = document.createElement("input");
+
+        row.className = "inventory-row";
+        row.dataset.inventoryIndex = String(index);
+
+        slot.className = "inventory-slot";
+        slot.textContent = String(index + 1).padStart(2, "0");
+
+        itemCell.className = "inventory-cell";
+        bulkCell.className = "inventory-cell";
+        itemLabel.textContent = "Item";
+        bulkLabel.textContent = "Ocupa";
+
+        itemInput.type = "text";
+        itemInput.value = item.name;
+        itemInput.placeholder = "Relíquia, arma, provisão";
+        itemInput.dataset.inventoryField = "name";
+        itemInput.setAttribute("aria-label", `Item ${index + 1}`);
+
+        bulkInput.className = "inventory-bulk-input";
+        bulkInput.type = "text";
+        bulkInput.inputMode = "decimal";
+        bulkInput.value = item.bulk;
+        bulkInput.placeholder = "0";
+        bulkInput.dataset.inventoryField = "bulk";
+        bulkInput.setAttribute("aria-label", `Quanto o item ${index + 1} ocupa`);
+
+        itemCell.append(itemLabel, itemInput);
+        bulkCell.append(bulkLabel, bulkInput);
+        row.append(slot, itemCell, bulkCell);
+        elements.inventoryList.append(row);
+      });
+    }
+
     function render() {
       renderCharacterTabs();
       const active = getActiveCharacter();
@@ -2482,6 +2726,7 @@
       renderAttributes(active);
       renderStatuses(active);
       renderSkills(active);
+      renderInventory(active);
     }
 
     function updateIdentityField(input) {
@@ -2641,6 +2886,39 @@
       renderSkills(active);
     }
 
+    function updateInventory(input) {
+      const active = getActiveCharacter();
+      if (!active) {
+        return;
+      }
+
+      const row = input.closest("[data-inventory-index]");
+      const index = Number.parseInt(row?.dataset.inventoryIndex || "-1", 10);
+      const field = input.dataset.inventoryField;
+
+      if (index < 0 || !field) {
+        return;
+      }
+
+      active.inventory = normalizeInventory(active.inventory, active.inventorySize);
+      active.inventory[index][field] = input.value;
+      elements.inventoryTotal.textContent = `Ocupação ${formatLoad(inventoryLoad(active))} / ${active.inventorySize}`;
+      scheduleSave();
+    }
+
+    function updateInventorySize(input) {
+      const active = getActiveCharacter();
+      if (!active) {
+        return;
+      }
+
+      active.inventorySize = clampNumber(input.value, 1, 99);
+      active.inventory = normalizeInventory(active.inventory, active.inventorySize);
+      input.value = active.inventorySize;
+      scheduleSave();
+      renderInventory(active);
+    }
+
     function openDeleteModal() {
       if (!getActiveCharacter()) {
         return;
@@ -2723,6 +3001,10 @@
           updateStatus(target);
         } else if (target.matches("[data-skill-field]")) {
           updateSkill(target);
+        } else if (target.matches("[data-inventory-field]")) {
+          updateInventory(target);
+        } else if (target === elements.inventorySize) {
+          updateInventorySize(target);
         }
       });
 
@@ -2730,6 +3012,10 @@
         const target = event.target;
         if (target.matches("[data-skill-field]")) {
           updateSkill(target);
+        } else if (target.matches("[data-inventory-field]")) {
+          updateInventory(target);
+        } else if (target === elements.inventorySize) {
+          updateInventorySize(target);
         }
       });
 
