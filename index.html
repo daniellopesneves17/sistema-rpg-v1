@@ -4,6 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Sinais do Fim · Fichas</title>
+  <link rel="icon" type="image/png" href="assets/logo-transparent.png">
+  <link rel="apple-touch-icon" href="assets/logo-transparent.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@400;700;900&family=Crimson+Text:ital,wght@0,400;0,600;0,700;1,400;1,600&family=Oswald:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -207,38 +209,14 @@
 
     .brand-sigil {
       position: relative;
-      width: clamp(3.7rem, 7vw, 6rem);
-      aspect-ratio: 1;
-      margin: 0.35rem 0 0.1rem;
-      border: 1px solid rgba(201, 168, 76, 0.5);
-      border-radius: 50%;
-      box-shadow:
-        inset 0 0 0 7px rgba(0, 0, 0, 0.35),
-        inset 0 0 0 8px rgba(192, 57, 43, 0.25),
-        0 0 28px rgba(192, 57, 43, 0.12);
-    }
-
-    .brand-sigil::before,
-    .brand-sigil::after {
-      position: absolute;
-      inset: 50% auto auto 50%;
-      content: "";
-      transform: translate(-50%, -50%) rotate(45deg);
-    }
-
-    .brand-sigil::before {
-      width: 58%;
-      aspect-ratio: 1;
-      border: 1px solid rgba(192, 57, 43, 0.58);
-      box-shadow: inset 0 0 18px rgba(255, 68, 68, 0.08);
-    }
-
-    .brand-sigil::after {
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-      background: var(--accent-primary);
-      box-shadow: 0 0 16px rgba(255, 68, 68, 0.55);
+      width: clamp(8.5rem, 18vw, 17rem);
+      height: auto;
+      margin: -0.2rem 0 -0.85rem;
+      border: 0;
+      border-radius: 0;
+      object-fit: contain;
+      filter: none;
+      box-shadow: none;
     }
 
     .brand-subtitle {
@@ -1388,7 +1366,8 @@
       }
 
       .brand-sigil {
-        width: 3.55rem;
+        width: clamp(7.4rem, 42vw, 10rem);
+        margin-bottom: -0.72rem;
       }
 
       .empty-state p {
@@ -1625,7 +1604,7 @@
   <main class="app-shell">
     <header class="brand" aria-label="Sinais do Fim">
       <h1 class="brand-title">Sinais do Fim</h1>
-      <div class="brand-sigil" aria-hidden="true"></div>
+      <img class="brand-sigil" src="assets/logo-transparent.png" alt="Logo Sinais do Fim">
       <p class="brand-subtitle">Sistema de Fichas</p>
     </header>
 
