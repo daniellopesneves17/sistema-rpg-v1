@@ -512,6 +512,7 @@
     }
 
     .sheet {
+      position: relative;
       display: grid;
       grid-template-columns: minmax(0, 1.08fr) minmax(20rem, 0.92fr);
       gap: clamp(1rem, 1.7vw, 1.6rem);
@@ -523,6 +524,18 @@
       filter: blur(8px);
       opacity: 0.42;
       user-select: none;
+    }
+
+    .sheet.locked::after {
+      position: absolute;
+      inset: 0;
+      z-index: 2;
+      content: "";
+      background:
+        radial-gradient(circle at 50% 22%, rgba(201, 168, 76, 0.08), transparent 30%),
+        rgba(5, 5, 6, 0.28);
+      backdrop-filter: blur(8px);
+      pointer-events: none;
     }
 
     .sheet.locked input,
@@ -1967,6 +1980,8 @@
       cancelDeleteButton: document.querySelector("#cancelDeleteButton"),
       confirmDeleteButton: document.querySelector("#confirmDeleteButton"),
       unlockModal: document.querySelector("#unlockModal"),
+      unlockTitle: document.querySelector("#unlockTitle"),
+      unlockText: document.querySelector("#unlockText"),
       unlockPassword: document.querySelector("#unlockPassword"),
       unlockError: document.querySelector("#unlockError"),
       cancelUnlockButton: document.querySelector("#cancelUnlockButton"),
@@ -3014,6 +3029,11 @@
       elements.sheetForm.classList.add("locked");
       elements.unlockError.classList.add("hidden");
       elements.unlockPassword.value = "";
+      const character = state.characters.find((item) => item.id === characterId);
+      elements.unlockTitle.textContent = character?.identity?.passwordHash ? "Ficha Selada" : "Definir Senha";
+      elements.unlockText.textContent = character?.identity?.passwordHash
+        ? "Digite a senha para abrir esta página do grimório."
+        : "Defina uma senha para proteger e abrir esta página do grimório.";
       elements.unlockModal.classList.add("open");
       requestAnimationFrame(() => elements.unlockPassword.focus());
     }
@@ -3021,6 +3041,7 @@
     function closeUnlockModal() {
       elements.unlockModal.classList.remove("open");
       elements.unlockPassword.value = "";
+      elements.unlockError.textContent = "Senha incorreta.";
       elements.unlockError.classList.add("hidden");
       const active = getActiveCharacter();
       elements.sheetForm.classList.toggle("locked", Boolean(active && !isCharacterUnlocked(active)));
@@ -3033,7 +3054,23 @@
         return;
       }
 
-      const typedHash = await hashPassword(elements.unlockPassword.value);
+      const password = elements.unlockPassword.value.trim();
+      if (!password) {
+        elements.unlockError.textContent = "Digite uma senha.";
+        elements.unlockError.classList.remove("hidden");
+        return;
+      }
+
+      const typedHash = await hashPassword(password);
+      if (!character.identity.passwordHash) {
+        character.identity.passwordHash = typedHash;
+        state.unlockedIds.add(character.id);
+        persistNow();
+        closeUnlockModal();
+        render();
+        return;
+      }
+
       if (typedHash === character.identity.passwordHash) {
         state.unlockedIds.add(character.id);
         closeUnlockModal();
@@ -3041,6 +3078,7 @@
         return;
       }
 
+      elements.unlockError.textContent = "Senha incorreta.";
       elements.unlockError.classList.remove("hidden");
       elements.unlockPassword.select();
     }
@@ -3104,6 +3142,7 @@
         }
 
         state.activeId = button.dataset.characterId;
+        state.unlockedIds.clear();
         persistNow();
         render();
       });
