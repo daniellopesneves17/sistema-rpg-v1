@@ -516,6 +516,20 @@
       grid-template-columns: minmax(0, 1.08fr) minmax(20rem, 0.92fr);
       gap: clamp(1rem, 1.7vw, 1.6rem);
       align-items: start;
+      transition: filter 320ms ease-in-out, opacity 320ms ease-in-out;
+    }
+
+    .sheet.locked {
+      filter: blur(8px);
+      opacity: 0.42;
+      user-select: none;
+    }
+
+    .sheet.locked input,
+    .sheet.locked textarea,
+    .sheet.locked select,
+    .sheet.locked button {
+      pointer-events: none;
     }
 
     .section {
@@ -672,6 +686,22 @@
 
     .field-icon input {
       padding-right: 2rem;
+    }
+
+    .password-field input {
+      color: var(--gold);
+      font-family: var(--font-number);
+      letter-spacing: 0.08em;
+      border: 1px solid rgba(201, 168, 76, 0.24);
+      background:
+        linear-gradient(180deg, rgba(201, 168, 76, 0.08), rgba(0, 0, 0, 0.18)),
+        rgba(6, 6, 8, 0.68);
+    }
+
+    .password-field small {
+      color: var(--text-muted);
+      font-size: 0.82rem;
+      font-style: italic;
     }
 
     #medo {
@@ -1784,6 +1814,12 @@
               <label for="objetivo">Objetivo</label>
               <textarea id="objetivo" data-field="identity.objetivo" rows="2" placeholder="O que ainda mantém esta alma andando"></textarea>
             </div>
+
+            <div class="field password-field">
+              <label for="sheetPassword">Senha da Ficha</label>
+              <input id="sheetPassword" type="password" autocomplete="new-password" placeholder="Definir ou alterar senha">
+              <small>Deixe em branco para manter a senha atual.</small>
+            </div>
           </div>
         </section>
 
@@ -1832,6 +1868,22 @@
       <div class="modal-actions">
         <button id="cancelDeleteButton" class="rune-button secondary" type="button">Manter Ficha</button>
         <button id="confirmDeleteButton" class="rune-button danger" type="button">Apagar para Sempre</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="unlockModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="unlockTitle" aria-describedby="unlockText">
+    <div class="modal-panel">
+      <h2 id="unlockTitle" class="modal-title">Ficha Selada</h2>
+      <p id="unlockText" class="modal-text">Digite a senha para abrir esta página do grimório.</p>
+      <div class="field password-field">
+        <label for="unlockPassword">Senha</label>
+        <input id="unlockPassword" type="password" autocomplete="current-password" placeholder="••••">
+      </div>
+      <p id="unlockError" class="modal-text hidden">Senha incorreta.</p>
+      <div class="modal-actions">
+        <button id="cancelUnlockButton" class="rune-button secondary" type="button">Cancelar</button>
+        <button id="confirmUnlockButton" class="rune-button" type="button">Abrir Ficha</button>
       </div>
     </div>
   </div>
@@ -1888,6 +1940,8 @@
       lastCloudWriteAt: 0,
       instanceId: makeId("session"),
       syncChannel: null,
+      unlockedIds: new Set(),
+      pendingUnlockId: null,
       applyingRemoteUpdate: false,
       quoteIndex: 0
     };
@@ -1908,9 +1962,15 @@
       inventorySize: document.querySelector("#inventorySize"),
       inventoryTotal: document.querySelector("#inventoryTotal"),
       inventoryList: document.querySelector("#inventoryList"),
+      sheetPassword: document.querySelector("#sheetPassword"),
       deleteModal: document.querySelector("#deleteModal"),
       cancelDeleteButton: document.querySelector("#cancelDeleteButton"),
       confirmDeleteButton: document.querySelector("#confirmDeleteButton"),
+      unlockModal: document.querySelector("#unlockModal"),
+      unlockPassword: document.querySelector("#unlockPassword"),
+      unlockError: document.querySelector("#unlockError"),
+      cancelUnlockButton: document.querySelector("#cancelUnlockButton"),
+      confirmUnlockButton: document.querySelector("#confirmUnlockButton"),
       flavorQuote: document.querySelector("#flavorQuote")
     };
 
@@ -1930,6 +1990,7 @@
         identity: {
           nome: "",
           elemento: "Elemento",
+          passwordHash: "",
           origem: "",
           medo: "",
           classe: "",
@@ -2022,6 +2083,22 @@
 
     function serializeCharacter(character) {
       return JSON.parse(JSON.stringify(character));
+    }
+
+    async function hashPassword(password) {
+      const data = new TextEncoder().encode(password);
+      const digest = await crypto.subtle.digest("SHA-256", data);
+      return [...new Uint8Array(digest)]
+        .map((byte) => byte.toString(16).padStart(2, "0"))
+        .join("");
+    }
+
+    function isCharacterProtected(character) {
+      return Boolean(character?.identity?.passwordHash);
+    }
+
+    function isCharacterUnlocked(character) {
+      return !isCharacterProtected(character) || state.unlockedIds.has(character.id);
     }
 
     async function fetchCloudCharacters() {
@@ -2395,6 +2472,11 @@
         const value = getPathValue(character, field.dataset.field);
         field.value = value ?? "";
       });
+      const passwordInput = elements.sheetPassword;
+      if (passwordInput) {
+        passwordInput.value = "";
+        passwordInput.placeholder = isCharacterProtected(character) ? "Senha definida" : "Definir senha";
+      }
     }
 
     function renderAttributes(character) {
@@ -2688,16 +2770,24 @@
       elements.sheetForm.classList.toggle("hidden", !hasCharacter);
       elements.deleteCharacterButton.disabled = !hasCharacter;
       elements.printButton.disabled = !hasCharacter;
+      elements.sheetForm.classList.remove("locked");
 
       if (!active) {
         return;
       }
 
+      elements.sheetForm.classList.toggle("locked", !isCharacterUnlocked(active));
       renderIdentity(active);
       renderAttributes(active);
       renderStatuses(active);
       renderSkills(active);
       renderInventory(active);
+
+      if (!isCharacterUnlocked(active)) {
+        openUnlockModal(active.id);
+      } else if (elements.unlockModal.classList.contains("open")) {
+        closeUnlockModal();
+      }
     }
 
     function updateIdentityField(input) {
@@ -2711,6 +2801,21 @@
       if (input.dataset.field === "identity.nome") {
         updateTabName(active);
       }
+    }
+
+    async function updateSheetPassword(input) {
+      const active = getActiveCharacter();
+      const password = input.value.trim();
+
+      if (!active || !password) {
+        return;
+      }
+
+      active.identity.passwordHash = await hashPassword(password);
+      state.unlockedIds.add(active.id);
+      input.value = "";
+      input.placeholder = "Senha definida";
+      scheduleSave();
     }
 
     function updateTabName(character) {
@@ -2904,6 +3009,42 @@
       elements.deleteCharacterButton.focus();
     }
 
+    function openUnlockModal(characterId = state.activeId) {
+      state.pendingUnlockId = characterId;
+      elements.sheetForm.classList.add("locked");
+      elements.unlockError.classList.add("hidden");
+      elements.unlockPassword.value = "";
+      elements.unlockModal.classList.add("open");
+      requestAnimationFrame(() => elements.unlockPassword.focus());
+    }
+
+    function closeUnlockModal() {
+      elements.unlockModal.classList.remove("open");
+      elements.unlockPassword.value = "";
+      elements.unlockError.classList.add("hidden");
+      const active = getActiveCharacter();
+      elements.sheetForm.classList.toggle("locked", Boolean(active && !isCharacterUnlocked(active)));
+    }
+
+    async function confirmUnlock() {
+      const character = state.characters.find((item) => item.id === state.pendingUnlockId);
+      if (!character) {
+        closeUnlockModal();
+        return;
+      }
+
+      const typedHash = await hashPassword(elements.unlockPassword.value);
+      if (typedHash === character.identity.passwordHash) {
+        state.unlockedIds.add(character.id);
+        closeUnlockModal();
+        render();
+        return;
+      }
+
+      elements.unlockError.classList.remove("hidden");
+      elements.unlockPassword.select();
+    }
+
     function setupEvents() {
       elements.newCharacterButton.addEventListener("click", createCharacter);
       elements.firstCharacterButton.addEventListener("click", createCharacter);
@@ -2911,6 +3052,8 @@
       elements.deleteCharacterButton.addEventListener("click", openDeleteModal);
       elements.cancelDeleteButton.addEventListener("click", closeDeleteModal);
       elements.confirmDeleteButton.addEventListener("click", deleteActiveCharacter);
+      elements.cancelUnlockButton.addEventListener("click", closeUnlockModal);
+      elements.confirmUnlockButton.addEventListener("click", confirmUnlock);
       elements.printButton.addEventListener("click", () => window.print());
 
       elements.deleteModal.addEventListener("click", (event) => {
@@ -2922,6 +3065,31 @@
       document.addEventListener("keydown", (event) => {
         if (event.key === "Escape" && elements.deleteModal.classList.contains("open")) {
           closeDeleteModal();
+        }
+        if (event.key === "Escape" && elements.unlockModal.classList.contains("open")) {
+          closeUnlockModal();
+        }
+      });
+
+      elements.unlockPassword.addEventListener("keydown", (event) => {
+        if (event.key === "Enter") {
+          event.preventDefault();
+          confirmUnlock();
+        }
+      });
+
+      elements.sheetPassword.addEventListener("keydown", (event) => {
+        if (event.key === "Enter") {
+          event.preventDefault();
+          updateSheetPassword(elements.sheetPassword);
+          elements.sheetPassword.blur();
+        }
+      });
+
+      elements.sheetForm.addEventListener("click", () => {
+        const active = getActiveCharacter();
+        if (active && !isCharacterUnlocked(active)) {
+          openUnlockModal(active.id);
         }
       });
 
@@ -2983,6 +3151,8 @@
         const target = event.target;
         if (target.matches("[data-skill-field]")) {
           updateSkill(target);
+        } else if (target === elements.sheetPassword) {
+          updateSheetPassword(target);
         } else if (target.matches("[data-inventory-field]")) {
           updateInventory(target);
         } else if (target === elements.inventorySize) {
