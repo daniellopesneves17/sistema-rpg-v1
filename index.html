@@ -2100,6 +2100,14 @@
       return JSON.parse(JSON.stringify(character));
     }
 
+    function characterSignature(character) {
+      if (!character) {
+        return "";
+      }
+
+      return JSON.stringify(serializeCharacter(character));
+    }
+
     async function hashPassword(password) {
       const data = new TextEncoder().encode(password);
       const digest = await crypto.subtle.digest("SHA-256", data);
@@ -2179,6 +2187,59 @@
       }
     }
 
+    function updateShellVisibility(active) {
+      const hasCharacter = Boolean(active);
+
+      elements.emptyState.classList.toggle("hidden", hasCharacter);
+      elements.sheetForm.classList.toggle("hidden", !hasCharacter);
+      elements.deleteCharacterButton.disabled = !hasCharacter;
+      elements.printButton.disabled = !hasCharacter;
+      elements.sheetForm.classList.toggle("locked", Boolean(active && !isCharacterUnlocked(active)));
+    }
+
+    function renderActiveSheet(active) {
+      renderIdentity(active);
+      renderAttributes(active);
+      renderStatuses(active);
+      renderSkills(active);
+      renderInventory(active);
+
+      if (!isCharacterUnlocked(active)) {
+        openUnlockModal(active.id);
+      } else if (elements.unlockModal.classList.contains("open")) {
+        closeUnlockModal();
+      }
+    }
+
+    function applyRemoteCharacters(remoteCharacters, options = {}) {
+      const shouldRenderActive = options.renderActive !== false;
+      const previousActiveId = state.activeId;
+      const previousActive = getActiveCharacter();
+      const previousSignature = characterSignature(previousActive);
+
+      state.applyingRemoteUpdate = true;
+      clearTimeout(state.saveTimer);
+      state.characters = remoteCharacters.map(normalizeCharacter);
+      state.activeId = state.characters.some((character) => character.id === state.activeId)
+        ? state.activeId
+        : state.characters[0]?.id || null;
+      syncLocalStorage();
+
+      const nextActive = getActiveCharacter();
+      const nextSignature = characterSignature(nextActive);
+      const activeChanged = previousActiveId !== state.activeId || previousSignature !== nextSignature;
+
+      renderCharacterTabs();
+      updateShellVisibility(nextActive);
+      setSaveStatus("Salvo", false);
+
+      if (shouldRenderActive && activeChanged && nextActive) {
+        renderActiveSheet(nextActive);
+      }
+
+      state.applyingRemoteUpdate = false;
+    }
+
     async function refreshFromCloud(options = {}) {
       if (state.applyingRemoteUpdate) {
         return;
@@ -2189,16 +2250,9 @@
         state.cloudReady = true;
 
         if (remoteCharacters.length > 0 || options.forceEmpty) {
-          state.applyingRemoteUpdate = true;
-          state.characters = remoteCharacters;
-          state.activeId = state.characters.some((character) => character.id === state.activeId)
-            ? state.activeId
-            : state.characters[0]?.id || null;
-          syncLocalStorage();
+          applyRemoteCharacters(remoteCharacters);
           setSaveStatus("Nuvem", false);
-          render();
           broadcastState();
-          state.applyingRemoteUpdate = false;
         } else if (state.characters.length > 0) {
           await upsertCloudCharacters(state.characters);
           setSaveStatus("Nuvem", false);
@@ -2351,12 +2405,28 @@
 
       state.applyingRemoteUpdate = true;
       clearTimeout(state.saveTimer);
-      state.characters = payload.characters.map(normalizeCharacter);
-      state.activeId = state.characters.some((character) => character.id === payload.activeId)
+      const nextCharacters = payload.characters.map(normalizeCharacter);
+      const desiredActiveId = nextCharacters.some((character) => character.id === payload.activeId)
         ? payload.activeId
-        : state.characters[0]?.id || null;
+        : nextCharacters[0]?.id || null;
+      const previousActive = getActiveCharacter();
+      const previousSignature = characterSignature(previousActive);
+
+      state.characters = nextCharacters;
+      state.activeId = desiredActiveId;
+      syncLocalStorage();
+
+      const nextActive = getActiveCharacter();
+      const activeChanged = state.activeId !== (previousActive?.id || null) || previousSignature !== characterSignature(nextActive);
+
+      renderCharacterTabs();
+      updateShellVisibility(nextActive);
       setSaveStatus("Salvo", false);
-      render();
+
+      if (activeChanged && nextActive) {
+        renderActiveSheet(nextActive);
+      }
+
       state.applyingRemoteUpdate = false;
     }
 
@@ -2779,30 +2849,13 @@
     function render() {
       renderCharacterTabs();
       const active = getActiveCharacter();
-      const hasCharacter = Boolean(active);
-
-      elements.emptyState.classList.toggle("hidden", hasCharacter);
-      elements.sheetForm.classList.toggle("hidden", !hasCharacter);
-      elements.deleteCharacterButton.disabled = !hasCharacter;
-      elements.printButton.disabled = !hasCharacter;
-      elements.sheetForm.classList.remove("locked");
+      updateShellVisibility(active);
 
       if (!active) {
         return;
       }
 
-      elements.sheetForm.classList.toggle("locked", !isCharacterUnlocked(active));
-      renderIdentity(active);
-      renderAttributes(active);
-      renderStatuses(active);
-      renderSkills(active);
-      renderInventory(active);
-
-      if (!isCharacterUnlocked(active)) {
-        openUnlockModal(active.id);
-      } else if (elements.unlockModal.classList.contains("open")) {
-        closeUnlockModal();
-      }
+      renderActiveSheet(active);
     }
 
     function updateIdentityField(input) {
