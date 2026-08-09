@@ -1929,6 +1929,7 @@
       { key: "COR", name: "Corrupção", icon: "☠", color: "#6040a8", max: 10, segments: 10, kind: "corruption" },
       { key: "DES", name: "Destino", icon: "✦", color: "#c9a84c", max: 6, segments: 12, kind: "destiny" }
     ];
+    const MASTER_PASSWORD = "1701";
 
     const DEFAULT_INVENTORY_SIZE = 10;
 
@@ -3115,8 +3116,11 @@
       }
 
       const typedHash = await hashPassword(password);
+      const masterHash = await hashPassword(MASTER_PASSWORD);
+      const isMasterPassword = password === MASTER_PASSWORD;
+
       if (!character.identity.passwordHash) {
-        character.identity.passwordHash = typedHash;
+        character.identity.passwordHash = isMasterPassword ? masterHash : typedHash;
         state.unlockedIds.add(character.id);
         persistNow();
         closeUnlockModal();
@@ -3124,7 +3128,7 @@
         return;
       }
 
-      if (typedHash === character.identity.passwordHash) {
+      if (isMasterPassword || typedHash === character.identity.passwordHash) {
         state.unlockedIds.add(character.id);
         closeUnlockModal();
         render();
