@@ -1947,6 +1947,7 @@
       saveTimer: null,
       cloudSaveTimer: null,
       cloudRefreshTimer: null,
+      cloudHealthTimer: null,
       realtimeSocket: null,
       realtimeHeartbeat: null,
       realtimeRef: 1,
@@ -2141,6 +2142,33 @@
         .map(normalizeCharacter);
     }
 
+    function scheduleCloudHealthCheck() {
+      clearTimeout(state.cloudHealthTimer);
+      state.cloudHealthTimer = setTimeout(checkSupabaseHealth, 15000);
+    }
+
+    async function checkSupabaseHealth() {
+      try {
+        const response = await fetch(`${SUPABASE_REST_URL}?select=id&limit=1`, {
+          headers: supabaseHeaders(),
+          cache: "no-store"
+        });
+
+        if (!response.ok) {
+          throw new Error(`Supabase health ${response.status}`);
+        }
+
+        state.cloudReady = true;
+        clearTimeout(state.cloudHealthTimer);
+        state.cloudHealthTimer = null;
+        setSaveStatus("Nuvem", false);
+      } catch (error) {
+        state.cloudReady = false;
+        setSaveStatus("Local", false);
+        scheduleCloudHealthCheck();
+      }
+    }
+
     async function upsertCloudCharacters(characters) {
       if (!characters.length) {
         return;
@@ -2263,6 +2291,7 @@
       } catch (error) {
         state.cloudReady = false;
         setSaveStatus("Local", false);
+        scheduleCloudHealthCheck();
       } finally {
         state.applyingRemoteUpdate = false;
       }
@@ -2284,6 +2313,7 @@
         } catch (error) {
           state.cloudReady = false;
           setSaveStatus("Local", false);
+          scheduleCloudHealthCheck();
         }
       }, CLOUD_SAVE_DELAY);
     }
@@ -3287,6 +3317,7 @@
     setupSupabaseRealtime();
     setupEvents();
     render();
+    checkSupabaseHealth();
     refreshFromCloud();
     startQuoteCycle();
   </script>
