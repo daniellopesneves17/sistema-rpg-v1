@@ -2596,7 +2596,9 @@
       });
       const passwordInput = elements.sheetPassword;
       if (passwordInput) {
-        passwordInput.value = "";
+        if (document.activeElement !== passwordInput) {
+          passwordInput.value = "";
+        }
         passwordInput.placeholder = isCharacterProtected(character) ? "Senha definida" : "Definir senha";
       }
     }
@@ -3115,17 +3117,24 @@
     }
 
     function openUnlockModal(characterId = state.activeId) {
+      const sameOpenModal = elements.unlockModal.classList.contains("open")
+        && state.pendingUnlockId === characterId;
+
       state.pendingUnlockId = characterId;
       elements.sheetForm.classList.add("locked");
       elements.unlockError.classList.add("hidden");
-      elements.unlockPassword.value = "";
+      if (!sameOpenModal) {
+        elements.unlockPassword.value = "";
+      }
       const character = state.characters.find((item) => item.id === characterId);
       elements.unlockTitle.textContent = character?.identity?.passwordHash ? "Ficha Selada" : "Definir Senha";
       elements.unlockText.textContent = character?.identity?.passwordHash
         ? "Digite a senha para abrir esta página do grimório."
         : "Defina uma senha para proteger e abrir esta página do grimório.";
       elements.unlockModal.classList.add("open");
-      requestAnimationFrame(() => elements.unlockPassword.focus());
+      if (!sameOpenModal) {
+        requestAnimationFrame(() => elements.unlockPassword.focus());
+      }
     }
 
     function closeUnlockModal() {
