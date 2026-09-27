@@ -1830,7 +1830,7 @@
 
             <div class="field password-field">
               <label for="sheetPassword">Senha da Ficha</label>
-              <input id="sheetPassword" type="password" autocomplete="new-password" placeholder="Definir ou alterar senha">
+              <input id="sheetPassword" type="password" autocomplete="new-password" placeholder="Senha de qualquer tamanho" spellcheck="false">
               <small>Deixe em branco para manter a senha atual.</small>
             </div>
           </div>
@@ -1891,7 +1891,7 @@
       <p id="unlockText" class="modal-text">Digite a senha para abrir esta página do grimório.</p>
       <div class="field password-field">
         <label for="unlockPassword">Senha</label>
-        <input id="unlockPassword" type="password" autocomplete="current-password" placeholder="••••">
+        <input id="unlockPassword" type="password" autocomplete="current-password" placeholder="Digite a senha" spellcheck="false">
       </div>
       <p id="unlockError" class="modal-text hidden">Senha incorreta.</p>
       <div class="modal-actions">
@@ -2910,9 +2910,9 @@
 
     async function updateSheetPassword(input) {
       const active = getActiveCharacter();
-      const password = input.value.trim();
+      const password = input.value;
 
-      if (!active || !password) {
+      if (!active || password.length === 0) {
         return;
       }
 
@@ -3144,8 +3144,8 @@
         return;
       }
 
-      const password = elements.unlockPassword.value.trim();
-      if (!password) {
+      const password = elements.unlockPassword.value;
+      if (password.length === 0) {
         elements.unlockError.textContent = "Digite uma senha.";
         elements.unlockError.classList.remove("hidden");
         return;
