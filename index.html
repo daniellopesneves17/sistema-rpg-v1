@@ -2148,6 +2148,8 @@
     }
 
     async function checkSupabaseHealth() {
+      const wasCloudReady = state.cloudReady;
+
       try {
         const response = await fetch(`${SUPABASE_REST_URL}?select=id&limit=1`, {
           headers: supabaseHeaders(),
@@ -2162,6 +2164,10 @@
         clearTimeout(state.cloudHealthTimer);
         state.cloudHealthTimer = null;
         setSaveStatus("Nuvem", false);
+
+        if (!wasCloudReady) {
+          await refreshFromCloud();
+        }
       } catch (error) {
         state.cloudReady = false;
         setSaveStatus("Local", false);
